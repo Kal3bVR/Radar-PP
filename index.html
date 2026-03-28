@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SiteForge AI — Website Builder Assistant</title>
+  <meta name="description" content="SiteForge AI: an unlimited website-building chat assistant that generates complete, runnable HTML/CSS/JS files." />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #111936;
+      --panel-2: #182447;
+      --text: #ebf1ff;
+      --muted: #9db0d7;
+      --accent: #5d8dff;
+      --accent-2: #63e6be;
+      --danger: #ff6b8b;
+      --border: #2b3a69;
+      --bubble-user: #26408b;
+      --bubble-ai: #1a2850;
+      --shadow: 0 12px 35px rgba(0,0,0,.35);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: radial-gradient(circle at 15% 15%, #17244a 0, #0b1020 40%), #0b1020;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      height: 100vh;
+      gap: 16px;
+      padding: 16px;
+    }
+
+    .sidebar, .main {
+      background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .sidebar { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .logo {
+      width: 34px; height: 34px; border-radius: 9px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 8px 20px rgba(93,141,255,.45);
+    }
+    .brand h1 { margin: 0; font-size: 1.05rem; }
+    .brand p { margin: 2px 0 0; font-size: .78rem; color: var(--muted); }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    label { font-size: .78rem; color: var(--muted); display: block; margin-bottom: 6px; }
+    input, select, button, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: #0f1733;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+    }
+
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    button {
+      cursor: pointer;
+      transition: transform .2s ease, filter .2s ease, background .2s ease;
+      background: linear-gradient(180deg, #2e4ea1, #21387d);
+      border: 1px solid #3d5fbc;
+      font-weight: 600;
+    }
+
+    button:hover { transform: translateY(-1px); filter: brightness(1.08); }
+    button:active { transform: translateY(1px); }
+
+    .ghost {
+      background: #141f42;
+      border-color: var(--border);
+      font-weight: 500;
+    }
+
+    .danger { background: #5e2333; border-color: #8c3049; }
+
+    .hint { color: var(--muted); font-size: .78rem; line-height: 1.45; }
+
+    .main {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(9, 14, 32, .65);
+      backdrop-filter: blur(10px);
+    }
+
+    .badge {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #101937;
+      color: var(--muted);
+      font-size: .75rem;
+    }
+
+    .chat {
+      overflow-y: auto;
+      padding: 16px;
+      scroll-behavior: smooth;
+    }
+
+    .msg {
+      max-width: min(900px, 92%);
+      margin: 0 0 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      padding: 12px;
+      animation: slideIn .28s ease;
+      position: relative;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .msg.user {
+      margin-left: auto;
+      background: linear-gradient(180deg, #2a4695, #21377b);
+      border-color: #3f63cc;
+    }
+
+    .msg.ai {
+      background: linear-gradient(180deg, #162244, #121d3d);
+    }
+
+    .meta {
+      font-size: .72rem;
+      color: #b8c7ec;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      opacity: .95;
+    }
+
+    .content { line-height: 1.55; white-space: pre-wrap; }
+
+    .typing {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: .8rem;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px dashed var(--border);
+      margin: 0 0 16px;
+    }
+
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-2); animation: pulse 1s infinite; }
+    .dot:nth-child(2) { animation-delay: .15s; }
+    .dot:nth-child(3) { animation-delay: .3s; }
+    @keyframes pulse { 0%, 100% { opacity: .3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+
+    .composer {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+      background: #0c1330;
+      display: grid;
+      gap: 10px;
+    }
+
+    .composer textarea {
+      resize: vertical;
+      min-height: 78px;
+      max-height: 180px;
+      line-height: 1.45;
+    }
+
+    .composer-actions { display: flex; gap: 8px; }
+    .composer-actions button { width: auto; }
+
+    .code-wrap {
+      margin-top: 10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #111;
+    }
+
+    .code-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      background: #171b2d;
+      border-bottom: 1px solid #252b45;
+      font-size: .76rem;
+      color: #b8c7ec;
+    }
+
+    .code-actions { display: flex; gap: 6px; }
+
+    .code-actions button {
+      width: auto;
+      background: #1f2f63;
+      border-color: #2f468f;
+      padding: 6px 8px;
+      font-size: .72rem;
+      border-radius: 8px;
+    }
+
+    pre[class*="language-"] {
+      margin: 0 !important;
+      max-height: 370px;
+      overflow: auto;
+      font-size: .82rem !important;
+    }
+    .token.tag{color:#7dd3fc}.token.attr{color:#fde68a}.token.str{color:#86efac}.token.kw{color:#c4b5fd}.token.com{color:#64748b}
+
+    .fullscreen {
+      position: fixed;
+      inset: 16px;
+      z-index: 1000;
+      border-radius: 16px;
+      box-shadow: 0 20px 48px rgba(0,0,0,.6);
+      background: #111;
+    }
+
+    .live-viewer {
+      margin-top: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #0f1733;
+    }
+
+    .live-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: .76rem;
+      color: var(--muted);
+      background: #101a39;
+    }
+
+    .live-body {
+      max-height: 190px;
+      overflow: auto;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .78rem;
+      white-space: pre;
+    }
+
+    @media (max-width: 960px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { max-height: 42vh; overflow-y: auto; }
+      .msg { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <h1>SiteForge AI</h1>
+          <p>Unlimited website builder copilot</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <label for="runtimeMode">Runtime Mode</label>
+        <select id="runtimeMode">
+          <option value="local">Local Generator (no backend)</option>
+          <option value="api">Live AI (API)</option>
+        </select>
+        <div id="apiPanel" style="display:none; margin-top:8px;">
+          <label for="apiBase">API Base URL</label>
+          <input id="apiBase" value="https://openrouter.ai/api/v1" />
+          <label for="apiModel" style="margin-top:8px;">Model</label>
+          <input id="apiModel" value="openai/gpt-4.1-mini" />
+          <label for="apiKey" style="margin-top:8px;">API Key (kept in your browser only)</label>
+          <input id="apiKey" type="password" placeholder="Paste your API key here" />
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="row">
+          <button id="newChat" class="ghost" type="button">New Chat</button>
+          <button id="exportChat" class="ghost" type="button">Export</button>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <button id="researchBtn" class="ghost" type="button">Research Tips</button>
+          <button id="clearMemory" class="danger" type="button">Clear Memory</button>
+        </div>
+      </div>
+
+      <p class="hint">
+        This is a regular HTML file. Use Local mode for fully offline generation, or API mode if you want live model responses.
+        API keys stay in your browser storage and are not hardcoded in this file.
+      </p>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <strong>Website Generation Chat</strong>
+        <span class="badge" id="memoryBadge">Memory: 0 messages</span>
+      </header>
+
+      <section id="chat" class="chat" aria-live="polite"></section>
+
+      <form id="composer" class="composer">
+        <textarea id="prompt" placeholder="Describe the website to build (purpose, sections, colors, interactions, accessibility goals)..." required></textarea>
+        <div class="composer-actions">
+          <button type="submit">Generate / Respond</button>
+          <button type="button" id="stopBtn" class="ghost">Stop</button>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <script>
+    (function() {
+      const state = {
+        history: JSON.parse(localStorage.getItem('siteforge-history') || '[]'),
+        streaming: false,
+        stopRequested: false,
+        latestCode: '',
+        latestFilename: 'index.html'
+      };
+
+      const $ = (sel) => document.querySelector(sel);
+      const chatEl = $('#chat');
+      const memoryBadge = $('#memoryBadge');
+      const promptEl = $('#prompt');
+      const runtimeModeEl = $('#runtimeMode');
+      const apiPanelEl = $('#apiPanel');
+      const apiBaseEl = $('#apiBase');
+      const apiModelEl = $('#apiModel');
+      const apiKeyEl = $('#apiKey');
+
+      const escapeHtml = (str = '') => str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+      function simpleHighlight(code, language) {
+        const esc = escapeHtml(code);
+        if (language === 'markup' || language === 'html') {
+          return esc
+            .replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="token com">$1</span>')
+            .replace(/(&lt;\/?)([a-zA-Z0-9-]+)/g, '$1<span class="token tag">$2</span>')
+            .replace(/([a-zA-Z-:]+)=(&quot;.*?&quot;)/g, '<span class="token attr">$1</span>=<span class="token str">$2</span>');
+        }
+        if (language === 'css') {
+          return esc
+            .replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="token com">$1</span>')
+            .replace(/([a-z-]+)(\s*:)/gi, '<span class="token attr">$1</span>$2')
+            .replace(/(#?[a-zA-Z0-9_.-]+)(\s*\{)/g, '<span class="token tag">$1</span>$2');
+        }
+        if (language === 'javascript' || language === 'js') {
+          return esc
+            .replace(/(\/\/.*?$|\/\*[\s\S]*?\*\/)/gm, '<span class="token com">$1</span>')
+            .replace(/\b(const|let|var|function|return|if|else|for|while|class|new|await|async|try|catch)\b/g, '<span class="token kw">$1</span>')
+            .replace(/(&quot;.*?&quot;|'.*?'|`[\s\S]*?`)/g, '<span class="token str">$1</span>');
+        }
+        return esc;
+      }
+
+      function saveHistory() {
+        localStorage.setItem('siteforge-history', JSON.stringify(state.history));
+        memoryBadge.textContent = `Memory: ${state.history.length} messages`;
+      }
+
+      function downloadText(filename, content) {
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
+
+      function parseCodeBlocks(text) {
+        const parts = [];
+        const re = /```([\w.-]+)?\n([\s\S]*?)```/g;
+        let last = 0;
+        let match;
+        while ((match = re.exec(text))) {
+          if (match.index > last) parts.push({ type: 'text', value: text.slice(last, match.index) });
+          parts.push({ type: 'code', lang: match[1] || 'markup', value: match[2] });
+          last = re.lastIndex;
+        }
+        if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
+        return parts;
+      }
+
+      function buildCodeBlock(code, language, filename) {
+        const wrap = document.createElement('div');
+        wrap.className = 'code-wrap';
+        const id = `code_${Math.random().toString(36).slice(2)}`;
+        wrap.innerHTML = `
+          <div class="code-head">
+            <span>${escapeHtml(filename || 'snippet.' + (language === 'markup' ? 'html' : language))}</span>
+            <div class="code-actions">
+              <button type="button" data-copy="${id}">Copy</button>
+              <button type="button" data-download="${id}">Download</button>
+              <button type="button" data-expand="${id}">Expand</button>
+            </div>
+          </div>
+          <pre class="language-${escapeHtml(language)}"><code id="${id}" class="language-${escapeHtml(language)}">${simpleHighlight(code, language)}</code></pre>
+        `;
+        const copyBtn = wrap.querySelector('[data-copy]');
+        copyBtn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code);
+            copyBtn.textContent = 'Copied';
+            setTimeout(() => copyBtn.textContent = 'Copy', 1000);
+          } catch { copyBtn.textContent = 'Failed'; }
+        });
+        wrap.querySelector('[data-download]').addEventListener('click', () => {
+          downloadText(filename || `download.${language === 'markup' ? 'html' : language}`, code);
+        });
+        wrap.querySelector('[data-expand]').addEventListener('click', () => {
+          wrap.classList.toggle('fullscreen');
+        });
+        return wrap;
+      }
+
+      function appendMessage(role, text, options = {}) {
+        const msg = document.createElement('article');
+        msg.className = `msg ${role}`;
+        const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        msg.innerHTML = `<div class="meta"><span>${role === 'user' ? 'You' : 'SiteForge AI'}</span><span>${stamp}</span></div>`;
+
+        const body = document.createElement('div');
+        body.className = 'content';
+        const parts = parseCodeBlocks(text);
+
+        parts.forEach((part, idx) => {
+          if (part.type === 'text') {
+            const p = document.createElement('div');
+            p.textContent = part.value;
+            body.appendChild(p);
+          } else {
+            const fileName = options.filename && idx === parts.length - 1 ? options.filename : (part.lang === 'html' || part.lang === 'markup' ? 'index.html' : `snippet.${part.lang}`);
+            const lang = part.lang === 'html' ? 'markup' : part.lang;
+            body.appendChild(buildCodeBlock(part.value, lang, fileName));
+          }
+        });
+
+        msg.appendChild(body);
+        chatEl.appendChild(msg);
+        chatEl.scrollTop = chatEl.scrollHeight;
+      }
+
+      function setTyping(visible) {
+        const existing = document.getElementById('typing');
+        if (visible && !existing) {
+          const typing = document.createElement('div');
+          typing.id = 'typing';
+          typing.className = 'typing';
+          typing.innerHTML = '<span>AI is thinking</span><span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+          chatEl.appendChild(typing);
+          chatEl.scrollTop = chatEl.scrollHeight;
+        } else if (!visible && existing) {
+          existing.remove();
+        }
+      }
+
+      function upsertLiveViewer(content) {
+        let viewer = document.getElementById('liveViewer');
+        if (!viewer) {
+          viewer = document.createElement('div');
+          viewer.id = 'liveViewer';
+          viewer.className = 'live-viewer';
+          viewer.innerHTML = `
+            <div class="live-head">
+              <span>Live code stream</span>
+              <button type="button" class="ghost" id="liveDownload" style="width:auto;padding:6px 8px;font-size:.72rem;">Download current</button>
+            </div>
+            <div class="live-body" id="liveBody"></div>
+          `;
+          chatEl.appendChild(viewer);
+          viewer.querySelector('#liveDownload').addEventListener('click', () => downloadText(state.latestFilename, state.latestCode || ''));
+        }
+        const body = viewer.querySelector('#liveBody');
+        body.textContent = content;
+        body.scrollTop = body.scrollHeight;
+        chatEl.scrollTop = chatEl.scrollHeight;
+      }
+
+      function removeLiveViewer() {
+        const viewer = document.getElementById('liveViewer');
+        if (viewer) viewer.remove();
+      }
+
+      function analyzeClarity(input) {
+        const mentionBuild = /(build|create|generate|make).*(website|landing page|site|html)/i.test(input);
+        const hasPurpose = /(portfolio|saas|restaurant|agency|ecommerce|shop|blog|dashboard|event|app)/i.test(input);
+        const hasSections = /(hero|pricing|about|contact|features|faq|testimonials|footer|nav)/i.test(input);
+        const hasStyle = /(dark|light|minimal|modern|color|theme|font|style)/i.test(input);
+        return mentionBuild && !(hasPurpose && hasSections && hasStyle);
+      }
+
+      function syntaxChecks(html) {
+        const issues = [];
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const parserErr = doc.querySelector('parsererror');
+        if (parserErr) issues.push('Potential HTML parse issue detected.');
+        if (!/<meta[^>]+name=["']viewport/i.test(html)) issues.push('Missing responsive viewport meta tag.');
+        if (!/<main[\s>]/i.test(html)) issues.push('Consider including a semantic <main> landmark for accessibility.');
+        if (!/aria-|alt=|role=/i.test(html)) issues.push('Accessibility attributes are limited; add alt/aria labels where needed.');
+        return issues;
+      }
+
+      function buildHtmlFromPrompt(prompt, memory) {
+        const title = (prompt.match(/for ([\w\s-]+)(website|site|page)/i)?.[1] || 'Modern Website').trim();
+        const palette = /green|eco|nature/i.test(prompt)
+          ? ['#0f172a','#052e16','#22c55e']
+          : /pink|creative|fashion/i.test(prompt)
+            ? ['#1f1235','#3b1d64','#ff5d8f']
+            : ['#0b1020','#1e3a8a','#5d8dff'];
+
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${title}</title>
+  <style>
+    :root{--bg:${palette[0]};--surface:${palette[1]};--accent:${palette[2]};--text:#e5edff;--muted:#9fb0d4}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,var(--bg),#020617);color:var(--text)}
+    .container{width:min(1100px,92%);margin-inline:auto}.nav{display:flex;justify-content:space-between;align-items:center;padding:1rem 0}
+    .btn{background:var(--accent);color:#001015;border:0;padding:.7rem 1rem;border-radius:.7rem;font-weight:700;cursor:pointer}
+    .hero{padding:5rem 0 3rem;display:grid;gap:1.2rem}.hero h1{font-size:clamp(2rem,5vw,3.5rem);margin:0}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;padding:2rem 0}
+    .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.15);padding:1rem;border-radius:1rem;backdrop-filter:blur(6px)}
+    footer{padding:2rem 0;color:var(--muted);font-size:.95rem} @media (max-width:700px){.nav{flex-direction:column;gap:.6rem;align-items:flex-start}}
+  </style>
+</head>
+<body>
+  <header class="container nav" aria-label="Primary">
+    <strong>${title}</strong>
+    <nav aria-label="Main navigation">
+      <button class="btn" id="ctaBtn">Get Started</button>
+    </nav>
+  </header>
+
+  <main class="container" id="main-content">
+    <section class="hero" aria-labelledby="hero-heading">
+      <p style="color:var(--muted);margin:0">Built with semantic HTML, embedded CSS/JS, responsive by default.</p>
+      <h1 id="hero-heading">Launch a polished web presence fast.</h1>
+      <p style="max-width:65ch;color:var(--muted)">This complete file was generated as a ready-to-run starter with accessible landmarks and responsive layouts.</p>
+      <div><button class="btn" id="exploreBtn">Explore Features</button></div>
+    </section>
+
+    <section class="grid" aria-label="Feature cards">
+      <article class="card"><h2>Responsive Layout</h2><p>Mobile-first grid with adaptive spacing.</p></article>
+      <article class="card"><h2>Performance-minded</h2><p>Single file, minimal dependencies, fast startup.</p></article>
+      <article class="card"><h2>Accessible Structure</h2><p>Semantic tags and labeled interactive controls.</p></article>
+    </section>
+  </main>
+
+  <footer class="container">
+    <p>&copy; <span id="year"></span> ${title}. All rights reserved.</p>
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+    const toast = (text) => { alert(text); };
+    document.getElementById('ctaBtn').addEventListener('click', () => toast('Primary CTA clicked.'));
+    document.getElementById('exploreBtn').addEventListener('click', () => document.querySelector('.grid').scrollIntoView({behavior:'smooth'}));
+  </script>
+</body>
+</html>`;
+      }
+
+      async function localWebsiteEngine(prompt, memory) {
+        if (analyzeClarity(prompt)) {
+          return {
+            text: `Before I generate a full production-ready website, I need a few details:\n1) What type of website is this (portfolio, SaaS, ecommerce, agency, etc.)?\n2) Which sections are required (hero, features, pricing, FAQ, contact, etc.)?\n3) Any preferred style direction (colors, typography, vibe)?\n4) Do you want a single-page site or multi-page output?`,
+            code: ''
+          };
+        }
+
+        const generated = buildHtmlFromPrompt(prompt, memory);
+        const issues = syntaxChecks(generated);
+        const note = issues.length
+          ? `I generated a complete runnable file and ran preflight checks. I also found potential improvements:\n- ${issues.join('\n- ')}\n\n`
+          : 'I generated a complete runnable file and it passed preflight structure checks.\n\n';
+
+        return {
+          text: `${note}Here is your file:\n\n\`\`\`html\n${generated}\n\`\`\``,
+          code: generated,
+          filename: 'index.html'
+        };
+      }
+
+      async function callLiveAI(prompt, memory) {
+        const apiBase = (apiBaseEl.value || '').trim().replace(/\/$/, '');
+        const apiKey = (apiKeyEl.value || '').trim();
+        const model = (apiModelEl.value || '').trim() || 'openai/gpt-4.1-mini';
+        if (!apiBase || !apiKey) throw new Error('API mode requires both API base URL and API key.');
+
+        const system = `You are SiteForge AI, specialized in building complete runnable websites. Ask clarifying questions when requirements are unclear. Default to complete HTML files with embedded CSS and JavaScript.`;
+        const messages = [
+          { role: 'system', content: system },
+          ...memory.slice(-30).map((m) => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text })),
+          { role: 'user', content: prompt }
+        ];
+
+        const resp = await fetch(`${apiBase}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({ model, messages, temperature: 0.4 })
+        });
+        if (!resp.ok) throw new Error(`API request failed (${resp.status}).`);
+        const json = await resp.json();
+        const text = json?.choices?.[0]?.message?.content || 'No response from model.';
+        return { text };
+      }
+
+      function fetchResearchTips() {
+        return [
+          'Use semantic landmarks (<header>, <main>, <footer>) and a heading hierarchy.',
+          'Start mobile-first and progressively enhance for larger screens.',
+          'Keep JavaScript modular and defer non-critical logic.',
+          'Prefer system fonts or preloaded fonts to reduce layout shifts.',
+          'Set explicit focus styles for keyboard users and avoid removing outlines.',
+          'Minimize layout shift by defining image/container sizes up front.'
+        ];
+      }
+
+      async function streamText(text, onChunk) {
+        const chunks = text.split(/(\s+)/).filter(Boolean);
+        let acc = '';
+        for (const piece of chunks) {
+          if (state.stopRequested) break;
+          acc += piece;
+          onChunk(acc);
+          await new Promise(r => setTimeout(r, Math.min(35, 4000 / Math.max(chunks.length, 1))));
+        }
+        return acc;
+      }
+
+      async function handlePrompt(prompt) {
+        if (!prompt.trim() || state.streaming) return;
+        state.stopRequested = false;
+        state.streaming = true;
+
+        appendMessage('user', prompt);
+        state.history.push({ role: 'user', text: prompt, time: Date.now() });
+        saveHistory();
+
+        setTyping(true);
+
+        let response;
+        try {
+          response = runtimeModeEl.value === 'api'
+            ? await callLiveAI(prompt, state.history)
+            : await localWebsiteEngine(prompt, state.history);
+        } catch (err) {
+          response = { text: `I hit an error: ${err.message}\n\nPlease review settings or retry.` };
+        }
+
+        setTyping(false);
+        removeLiveViewer();
+
+        let liveText = '';
+        const streamed = await streamText(response.text, (partial) => {
+          liveText = partial;
+          const codeMatch = partial.match(/```(?:html|markup|css|javascript|js)?\n([\s\S]*)$/i);
+          if (codeMatch) upsertLiveViewer(codeMatch[1]);
+        });
+
+        appendMessage('ai', streamed, { filename: response.filename || 'index.html' });
+
+        if (response.code) {
+          state.latestCode = response.code;
+          state.latestFilename = response.filename || 'index.html';
+        }
+
+        state.history.push({ role: 'ai', text: streamed, time: Date.now() });
+        saveHistory();
+
+        removeLiveViewer();
+        state.streaming = false;
+      }
+
+      function hydrateFromHistory() {
+        chatEl.innerHTML = '';
+        state.history.forEach(item => appendMessage(item.role, item.text));
+        saveHistory();
+      }
+
+      $('#composer').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = promptEl.value;
+        promptEl.value = '';
+        await handlePrompt(text);
+      });
+
+      $('#stopBtn').addEventListener('click', () => {
+        state.stopRequested = true;
+      });
+
+      $('#newChat').addEventListener('click', () => {
+        chatEl.innerHTML = '';
+      });
+
+      $('#exportChat').addEventListener('click', () => {
+        const payload = {
+          exportedAt: new Date().toISOString(),
+          messages: state.history
+        };
+        downloadText('siteforge-chat-history.json', JSON.stringify(payload, null, 2));
+      });
+
+      $('#clearMemory').addEventListener('click', () => {
+        if (confirm('Clear all saved conversation memory?')) {
+          state.history = [];
+          localStorage.removeItem('siteforge-history');
+          chatEl.innerHTML = '';
+          saveHistory();
+        }
+      });
+
+      $('#researchBtn').addEventListener('click', async () => {
+        setTyping(true);
+        const tips = await fetchResearchTips();
+        setTyping(false);
+        const text = `Here are current web-practice tips I can use while generating websites:\n\n${tips.map(t => `- ${t}`).join('\n')}`;
+        appendMessage('ai', text);
+        state.history.push({ role: 'ai', text, time: Date.now() });
+        saveHistory();
+      });
+
+      function syncModeUI() {
+        apiPanelEl.style.display = runtimeModeEl.value === 'api' ? 'block' : 'none';
+      }
+
+      runtimeModeEl.addEventListener('change', () => {
+        localStorage.setItem('siteforge-runtime-mode', runtimeModeEl.value);
+        syncModeUI();
+      });
+
+      apiBaseEl.addEventListener('input', () => localStorage.setItem('siteforge-api-base', apiBaseEl.value));
+      apiModelEl.addEventListener('input', () => localStorage.setItem('siteforge-api-model', apiModelEl.value));
+      apiKeyEl.addEventListener('input', () => localStorage.setItem('siteforge-api-key', apiKeyEl.value));
+
+      hydrateFromHistory();
+      runtimeModeEl.value = localStorage.getItem('siteforge-runtime-mode') || 'local';
+      apiBaseEl.value = localStorage.getItem('siteforge-api-base') || apiBaseEl.value;
+      apiModelEl.value = localStorage.getItem('siteforge-api-model') || apiModelEl.value;
+      apiKeyEl.value = localStorage.getItem('siteforge-api-key') || '';
+      syncModeUI();
+      if (!state.history.length) {
+        appendMessage('ai', 'Describe the website you want to build. I will generate complete runnable files, ask clarifying questions when needed, and stream output in real time.');
+      }
+    })();
+  </script>
+</body>
+</html>
