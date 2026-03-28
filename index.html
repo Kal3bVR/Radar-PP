@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kabeb Radar Console</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
+    />
+    <style>
+      :root {
+        --bg: #020617;
+        --panel: rgba(15, 23, 42, 0.88);
+        --border: rgba(100, 116, 139, 0.4);
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --accent: #38bdf8;
+        --pink: #ec4899;
+      }
+      html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; }
+      #map { height: 100%; width: 100%; }
+      .panel {
+        position: absolute;
+        z-index: 1000;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        backdrop-filter: blur(8px);
+        box-shadow: 0 12px 24px rgba(2, 6, 23, 0.55);
+      }
+      .left { top: 14px; left: 14px; width: min(360px, calc(100vw - 28px)); max-height: calc(100vh - 28px); overflow: auto; }
+      .right { top: 14px; right: 14px; padding: 10px 12px; text-align: right; }
+      .bottom { bottom: 14px; left: 50%; transform: translateX(-50%); width: min(420px, calc(100vw - 28px)); padding: 10px 12px; }
+      .coords { bottom: 14px; left: 14px; padding: 6px 10px; font-size: 12px; }
+      .section { padding: 12px; border-bottom: 1px solid rgba(71,85,105,.35); }
+      .section:last-child { border-bottom: 0; }
+      h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #7dd3fc; }
+      label { display: block; font-size: 12px; margin-bottom: 4px; color: var(--muted); }
+      input, select, textarea, button {
+        width: 100%; box-sizing: border-box; border-radius: 8px; border: 1px solid rgba(71,85,105,.8);
+        background: rgba(2,6,23,.85); color: var(--text); padding: 8px 10px; margin-bottom: 8px;
+      }
+      button { cursor: pointer; font-weight: 600; }
+      button.primary { background: rgba(56, 189, 248, .18); border-color: rgba(56, 189, 248, .55); }
+      button.pink { background: rgba(236,72,153,.2); border-color: rgba(236,72,153,.55); }
+      .row { display: flex; gap: 8px; }
+      .row > * { flex: 1; }
+      .small { font-size: 12px; color: var(--muted); }
+      .badge { font-size: 11px; background: rgba(30,41,59,.8); padding: 3px 8px; border-radius: 99px; border: 1px solid rgba(100,116,139,.4); }
+      .legend-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; color: #cbd5e1; }
+      .swatch { width: 30px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 8px; }
+      .hidden { display: none; }
+      .pulse {
+        animation: pulse 1.7s infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { filter: drop-shadow(0 0 0 rgba(236,72,153,.3)); }
+        50% { filter: drop-shadow(0 0 8px rgba(236,72,153,1)); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <aside class="panel left">
+      <section class="section">
+        <h2>Radar Controls</h2>
+        <label for="layer">Layer</label>
+        <select id="layer">
+          <option value="reflectivity">Reflectivity</option>
+          <option value="velocity">Velocity</option>
+          <option value="cc">Correlation Coef (CC)</option>
+          <option value="srv">Storm Relative Velocity (SRV)</option>
+        </select>
+
+        <label for="opacity">Opacity (<span id="opacityVal">70</span>%)</label>
+        <input type="range" id="opacity" min="0.1" max="1" step="0.05" value="0.7" />
+
+        <label for="timeline">Time Scrubber (<span id="frameTime">--:--</span>)</label>
+        <input type="range" id="timeline" min="0" max="17" value="0" />
+        <button id="toggleAnim" class="primary">Pause Animation</button>
+
+        <label for="search">Location Search</label>
+        <div class="row">
+          <input id="search" placeholder="City, State" value="Oklahoma City" />
+          <button id="goLocation" class="primary">Go</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Weather Models</h2>
+        <select id="model">
+          <option value="gfs">GFS</option>
+          <option value="hrrr" selected>HRRR</option>
+          <option value="nam">NAM</option>
+        </select>
+        <label for="modelHour">Forecast Hour (+<span id="modelHourVal">1</span>h)</label>
+        <input type="range" id="modelHour" min="0" max="48" value="1" />
+        <div class="small" id="modelText">HRRR high-resolution forecast +1h</div>
+      </section>
+
+      <section class="section">
+        <h2>Warning Status</h2>
+        <div class="row">
+          <span class="badge">Official: <span id="offCount">0</span></span>
+          <span class="badge" style="color:#f9a8d4;">Kabeb: <span id="kabebCount">0</span></span>
+        </div>
+      </section>
+
+      <section class="section" id="loginSection">
+        <h2 style="color:#f9a8d4;">Admin Login</h2>
+        <input id="username" placeholder="Username" />
+        <input id="password" type="password" placeholder="Password" />
+        <button id="loginBtn" class="pink">Log In</button>
+        <div class="small">Default: kabeb-admin / radar123</div>
+      </section>
+
+      <section class="section hidden" id="kabebSection">
+        <h2 style="color:#f9a8d4;">Kabeb Warnings</h2>
+        <div class="row">
+          <button id="drawBtn" class="pink">Draw Polygon</button>
+          <button id="clearDraft">Clear Draft</button>
+        </div>
+        <div class="small">Draw status: <span id="drawStatus">idle</span></div>
+
+        <input id="warnTitle" value="Kabeb Advisory" placeholder="Warning title" />
+        <textarea id="warnDesc">Rapidly strengthening storms expected in this area.</textarea>
+        <select id="warnSeverity">
+          <option value="low">Low</option>
+          <option value="moderate" selected>Moderate</option>
+          <option value="high">High</option>
+          <option value="extreme">Extreme</option>
+        </select>
+        <label for="warnExpire">Expiration</label>
+        <input id="warnExpire" type="datetime-local" />
+        <button id="broadcast" class="pink">Broadcast Kabeb Warning</button>
+      </section>
+    </aside>
+
+    <div class="panel right">
+      <div style="font-size:18px;font-weight:700;color:#7dd3fc;">Kabeb Radar Console</div>
+      <div class="small">Standalone HTML Edition</div>
+      <div class="small" id="headerFrame">Frame 1/18</div>
+    </div>
+
+    <div class="panel coords" id="coords">Lat 0.000 | Lon 0.000</div>
+
+    <aside class="panel bottom">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <strong style="font-size:12px;">Legend</strong>
+        <span class="small">MapTiler basemap + simulated radar</span>
+      </div>
+      <div class="legend-grid">
+        <div><span class="swatch" style="background:#22d3ee;"></span>Reflectivity</div>
+        <div><span class="swatch" style="background:#f97316;"></span>Velocity</div>
+        <div><span class="swatch" style="background:#e879f9;"></span>CC</div>
+        <div><span class="swatch" style="background:#ef4444;"></span>SRV</div>
+      </div>
+    </aside>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script>
+      const state = {
+        radarLayer: 'reflectivity',
+        radarOpacity: 0.7,
+        timelineIndex: 0,
+        isAnimating: true,
+        model: 'hrrr',
+        modelHour: 1,
+        radarFrames: generateFrames(),
+        currentDraft: null,
+        officialWarnings: createOfficialWarnings(),
+        kabebWarnings: loadKabebWarnings()
+      };
+
+      const favorites = {
+        'oklahoma city': [35.4676, -97.5164],
+        dallas: [32.7767, -96.797],
+        chicago: [41.8781, -87.6298],
+        miami: [25.7617, -80.1918],
+        denver: [39.7392, -104.9903]
+      };
+
+      const map = L.map('map', { zoomControl: true, minZoom: 3 }).setView([37.8, -96.2], 5);
+      L.tileLayer('https://api.maptiler.com/maps/019d34b0-bced-7e2d-8911-f41023514778/{z}/{x}/{y}.png?key=wiOlE29cBVaCXJZwXOD8', {
+        attribution: '&copy; MapTiler & OpenStreetMap contributors'
+      }).addTo(map);
+
+      const radarGroup = L.layerGroup().addTo(map);
+      const officialGroup = L.layerGroup().addTo(map);
+      const kabebGroup = L.layerGroup().addTo(map);
+      const drawGroup = L.featureGroup().addTo(map);
+
+      const drawControl = new L.Control.Draw({
+        draw: {
+          polygon: {
+            allowIntersection: false,
+            shapeOptions: { color: '#f472b6', weight: 3 }
+          },
+          polyline: false,
+          rectangle: false,
+          circle: false,
+          marker: false,
+          circlemarker: false
+        },
+        edit: { featureGroup: drawGroup, edit: false, remove: true }
+      });
+
+      let animTimer;
+      let drawEnabled = false;
+      let bc;
+
+      if ('BroadcastChannel' in window) {
+        bc = new BroadcastChannel('kabeb-radar-warnings');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'kabeb:update') {
+            state.kabebWarnings = event.data.payload;
+            renderKabebWarnings();
+            syncCounts();
+            beep();
+          }
+        };
+      }
+
+      window.addEventListener('storage', (event) => {
+        if (event.key === 'kabeb_warnings') {
+          state.kabebWarnings = loadKabebWarnings();
+          renderKabebWarnings();
+          syncCounts();
+        }
+      });
+
+      map.on('mousemove', (event) => {
+        document.getElementById('coords').textContent = `Lat ${event.latlng.lat.toFixed(3)} | Lon ${event.latlng.lng.toFixed(3)}`;
+      });
+
+      map.on(L.Draw.Event.CREATED, (event) => {
+        drawGroup.clearLayers();
+        state.currentDraft = event.layer;
+        drawGroup.addLayer(event.layer);
+        document.getElementById('drawStatus').textContent = 'polygon ready';
+      });
+
+      map.on(L.Draw.Event.DELETED, () => {
+        state.currentDraft = null;
+        document.getElementById('drawStatus').textContent = 'idle';
+      });
+
+      function wireControls() {
+        const layerColors = { reflectivity: '#22d3ee', velocity: '#f97316', cc: '#e879f9', srv: '#ef4444' };
+
+        document.getElementById('layer').addEventListener('change', (e) => {
+          state.radarLayer = e.target.value;
+          renderRadar();
+        });
+
+        document.getElementById('opacity').addEventListener('input', (e) => {
+          state.radarOpacity = Number(e.target.value);
+          document.getElementById('opacityVal').textContent = String(Math.round(state.radarOpacity * 100));
+          renderRadar();
+        });
+
+        document.getElementById('timeline').addEventListener('input', (e) => {
+          state.timelineIndex = Number(e.target.value);
+          state.isAnimating = false;
+          document.getElementById('toggleAnim').textContent = 'Play Animation';
+          renderRadar();
+          syncFrameText();
+        });
+
+        document.getElementById('toggleAnim').addEventListener('click', () => {
+          state.isAnimating = !state.isAnimating;
+          document.getElementById('toggleAnim').textContent = state.isAnimating ? 'Pause Animation' : 'Play Animation';
+        });
+
+        document.getElementById('goLocation').addEventListener('click', async () => {
+          const q = document.getElementById('search').value.trim().toLowerCase();
+          if (favorites[q]) {
+            map.flyTo(favorites[q], 8, { duration: 1.2 });
+            return;
+          }
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`);
+            const json = await res.json();
+            if (!json.length) {
+              alert('Location not found.');
+              return;
+            }
+            map.flyTo([Number(json[0].lat), Number(json[0].lon)], 8, { duration: 1.2 });
+          } catch {
+            alert('Search unavailable. Try a favorite city.');
+          }
+        });
+
+        document.getElementById('model').addEventListener('change', (e) => {
+          state.model = e.target.value;
+          syncModelText();
+        });
+
+        document.getElementById('modelHour').addEventListener('input', (e) => {
+          state.modelHour = Number(e.target.value);
+          syncModelText();
+        });
+
+        document.getElementById('loginBtn').addEventListener('click', () => {
+          const u = document.getElementById('username').value;
+          const p = document.getElementById('password').value;
+          if (u === 'kabeb-admin' && p === 'radar123') {
+            sessionStorage.setItem('kabeb_admin', u);
+            setAdminUi(true);
+          } else {
+            alert('Invalid credentials.');
+          }
+        });
+
+        document.getElementById('drawBtn').addEventListener('click', () => {
+          if (!drawEnabled) {
+            map.addControl(drawControl);
+            drawEnabled = true;
+            new L.Draw.Polygon(map, drawControl.options.draw.polygon).enable();
+            document.getElementById('drawStatus').textContent = 'drawing';
+            return;
+          }
+          map.removeControl(drawControl);
+          drawEnabled = false;
+          document.getElementById('drawStatus').textContent = state.currentDraft ? 'polygon ready' : 'idle';
+        });
+
+        document.getElementById('clearDraft').addEventListener('click', () => {
+          drawGroup.clearLayers();
+          state.currentDraft = null;
+          document.getElementById('drawStatus').textContent = 'idle';
+        });
+
+        document.getElementById('warnExpire').value = new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16);
+
+        document.getElementById('broadcast').addEventListener('click', () => {
+          if (!state.currentDraft) {
+            alert('Draw a polygon first.');
+            return;
+          }
+
+          const geo = state.currentDraft.toGeoJSON();
+          const warning = {
+            id: crypto.randomUUID(),
+            title: document.getElementById('warnTitle').value,
+            description: document.getElementById('warnDesc').value,
+            severity: document.getElementById('warnSeverity').value,
+            expiresAt: new Date(document.getElementById('warnExpire').value).toISOString(),
+            createdAt: new Date().toISOString(),
+            createdBy: sessionStorage.getItem('kabeb_admin') || 'admin',
+            geometry: geo
+          };
+
+          state.kabebWarnings.unshift(warning);
+          persistKabebWarnings();
+          renderKabebWarnings();
+          syncCounts();
+          beep();
+
+          drawGroup.clearLayers();
+          state.currentDraft = null;
+          document.getElementById('drawStatus').textContent = 'idle';
+        });
+      }
+
+      function setAdminUi(isAdmin) {
+        document.getElementById('loginSection').classList.toggle('hidden', isAdmin);
+        document.getElementById('kabebSection').classList.toggle('hidden', !isAdmin);
+      }
+
+      function syncModelText() {
+        const text = state.model === 'hrrr'
+          ? `HRRR high-resolution forecast +${state.modelHour}h`
+          : state.model === 'nam'
+          ? `NAM mesoscale run +${state.modelHour}h`
+          : `GFS synoptic guidance +${state.modelHour}h`;
+
+        document.getElementById('modelHourVal').textContent = String(state.modelHour);
+        document.getElementById('modelText').textContent = text;
+      }
+
+      function syncFrameText() {
+        const frame = state.radarFrames[state.timelineIndex];
+        document.getElementById('frameTime').textContent = new Date(frame.timestamp).toLocaleTimeString();
+        document.getElementById('headerFrame').textContent = `Frame ${state.timelineIndex + 1}/${state.radarFrames.length} • ${new Date(frame.timestamp).toLocaleTimeString()}`;
+        document.getElementById('timeline').value = String(state.timelineIndex);
+      }
+
+      function renderRadar() {
+        radarGroup.clearLayers();
+        const colors = { reflectivity: '#22d3ee', velocity: '#f97316', cc: '#e879f9', srv: '#ef4444' };
+        const seed = state.timelineIndex + 4;
+        const base = [[35.6, -97.4], [33.0, -96.7], [39.2, -94.8], [41.1, -93.6], [29.8, -95.3]];
+
+        base.forEach((coord, idx) => {
+          const lat = coord[0] + Math.sin(seed + idx) * 0.2;
+          const lon = coord[1] + Math.cos(seed + idx) * 0.2;
+          const radius = 20000 + Math.random() * 45000;
+          const value = 25 + Math.random() * 55;
+          L.circle([lat, lon], {
+            radius,
+            color: colors[state.radarLayer],
+            fillColor: colors[state.radarLayer],
+            fillOpacity: Math.min(state.radarOpacity, value / 100),
+            weight: 1.5
+          }).bindPopup(`${state.radarLayer.toUpperCase()} signal ${value.toFixed(0)}`).addTo(radarGroup);
+        });
+      }
+
+      function renderOfficialWarnings() {
+        officialGroup.clearLayers();
+        state.officialWarnings.forEach((warning) => {
+          L.geoJSON(warning.geometry, {
+            style: { color: warning.color, weight: 2, fillOpacity: 0.2 }
+          }).bindPopup(`
+            <strong>${warning.type.replaceAll('_', ' ')}</strong><br/>
+            Issued: ${new Date(warning.issuedAt).toLocaleString()}<br/>
+            Expires: ${new Date(warning.expiresAt).toLocaleString()}<br/>
+            ${warning.description}
+          `).addTo(officialGroup);
+        });
+      }
+
+      function renderKabebWarnings() {
+        kabebGroup.clearLayers();
+        state.kabebWarnings.forEach((warning) => {
+          L.geoJSON(warning.geometry, {
+            style: { color: '#ec4899', weight: 3, fillColor: '#ec4899', fillOpacity: 0.14, className: 'pulse' }
+          }).bindPopup(`
+            <strong>${warning.title}</strong><br/>
+            Severity: ${warning.severity}<br/>
+            By: ${warning.createdBy}<br/>
+            Expires: ${new Date(warning.expiresAt).toLocaleString()}<br/>
+            ${warning.description}
+          `).addTo(kabebGroup);
+        });
+      }
+
+      function syncCounts() {
+        document.getElementById('offCount').textContent = String(state.officialWarnings.length);
+        document.getElementById('kabebCount').textContent = String(state.kabebWarnings.length);
+      }
+
+      function persistKabebWarnings() {
+        localStorage.setItem('kabeb_warnings', JSON.stringify(state.kabebWarnings));
+        if (bc) bc.postMessage({ type: 'kabeb:update', payload: state.kabebWarnings });
+      }
+
+      function loadKabebWarnings() {
+        try {
+          return JSON.parse(localStorage.getItem('kabeb_warnings') || '[]');
+        } catch {
+          return [];
+        }
+      }
+
+      function createOfficialWarnings() {
+        const now = Date.now();
+        return [
+          {
+            id: 'off-1',
+            type: 'severe_thunderstorm',
+            issuedAt: new Date(now - 20 * 60 * 1000).toISOString(),
+            expiresAt: new Date(now + 40 * 60 * 1000).toISOString(),
+            description: 'Quarter-size hail and 60 mph wind gusts are possible.',
+            color: '#f59e0b',
+            geometry: {
+              type: 'Feature',
+              geometry: {
+                type: 'Polygon',
+                coordinates: [[[-97.8, 35.4], [-97.2, 35.4], [-97.1, 35.8], [-97.7, 35.9], [-97.8, 35.4]]]
+              },
+              properties: {}
+            }
+          },
+          {
+            id: 'off-2',
+            type: 'flash_flood',
+            issuedAt: new Date(now - 10 * 60 * 1000).toISOString(),
+            expiresAt: new Date(now + 80 * 60 * 1000).toISOString(),
+            description: 'Flooding caused by excessive rainfall is expected in low-lying areas.',
+            color: '#22c55e',
+            geometry: {
+              type: 'Feature',
+              geometry: {
+                type: 'Polygon',
+                coordinates: [[[-96.95, 32.6], [-96.4, 32.6], [-96.35, 33.0], [-96.85, 33.1], [-96.95, 32.6]]]
+              },
+              properties: {}
+            }
+          }
+        ];
+      }
+
+      function generateFrames(count = 18) {
+        const now = Date.now();
+        return Array.from({ length: count }).map((_, i) => ({
+          id: `frame-${i}`,
+          timestamp: new Date(now - (count - i - 1) * 2 * 60 * 1000).toISOString()
+        }));
+      }
+
+      function beep() {
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          const context = new AudioContext();
+          const o = context.createOscillator();
+          const g = context.createGain();
+          o.type = 'sine';
+          o.frequency.value = 880;
+          g.gain.value = 0.04;
+          o.connect(g);
+          g.connect(context.destination);
+          o.start();
+          setTimeout(() => { o.stop(); context.close(); }, 110);
+        } catch {}
+      }
+
+      function startAnimation() {
+        animTimer = setInterval(() => {
+          if (!state.isAnimating) return;
+          state.timelineIndex = (state.timelineIndex + 1) % state.radarFrames.length;
+          renderRadar();
+          syncFrameText();
+        }, 800);
+      }
+
+      wireControls();
+      setAdminUi(Boolean(sessionStorage.getItem('kabeb_admin')));
+      renderRadar();
+      renderOfficialWarnings();
+      renderKabebWarnings();
+      syncCounts();
+      syncModelText();
+      syncFrameText();
+      startAnimation();
+    </script>
+  </body>
+</html>
